@@ -18,7 +18,13 @@ const unsigned long MAX_PUMP_MS = 10000UL;
 const unsigned long SOAK_MS = 60000UL; // apa are timp sa se distribuie
 const unsigned long SAMPLE_MS = 250UL;
 const unsigned long LOG_MS = 1000UL;
+const unsigned long DRY_CAPTURE_MS = 10000UL;
+const unsigned long WET_CAPTURE_MS = 20000UL;
 const uint16_t MAGIC = 0x5732;
+
+enum CalibrationStep { IDLE, WAIT_DRY, WAIT_WET };
+CalibrationStep calibrationStep = IDLE;
+unsigned long stepStarted = 0;
 
 struct Calibration {
   uint16_t magic;
@@ -73,14 +79,48 @@ void refreshSensor() {
 
 void printHelp() {
   Serial.println(F("=== UDATOR AUTOMAT ==="));
-  Serial.println(F("h = ajutor; c = mod calibrare (pompa oprita)"));
-  Serial.println(F("u = memoreaza RAW in pamant uscat"));
-  Serial.println(F("w = memoreaza RAW in pamant foarte umed"));
-  Serial.println(F("s = salveaza calibrarea in EEPROM"));
+  Serial.println(F("h = ajutor; c = calibrare ghidata automata"));
+  Serial.println(F("Inainte de c: senzorul in sol uscat, pompa deconectata."));
+  Serial.println(F("Dupa 10s: muta senzorul in sol foarte umed in 20s."));
+  Serial.println(F("Programul salveaza si activeaza automat dupa calibrare."));
   Serial.println(F("a = porneste modul automat cu calibrare valida"));
   Serial.println(F("o = opreste modul automat si pompa"));
   Serial.println(F("r = deblocheaza dupa limita de timp (pompa oprita)"));
   Serial.println(F("Calibreaza cu pompa deconectata; reconecteaza apoi."));
+}
+
+void processCalibration(unsigned long now) {
+  if (calibrationStep == WAIT_DRY && now - stepStarted >= DRY_CAPTURE_MS) {
+    calibration.dry = readSensor();
+    dryCaptured = true;
+    calibrationStep = WAIT_WET;
+    stepStarted = now;
+    Serial.print(F("USCAT RAW = "));
+    Serial.println(calibration.dry);
+    Serial.println(F("Acum muta senzorul in sol foarte umed."));
+    Serial.println(F("Ai 20 secunde; tine electronica senzorului uscata."));
+  } else if (calibrationStep == WAIT_WET &&
+             now - stepStarted >= WET_CAPTURE_MS) {
+    calibration.wet = readSensor();
+    wetCaptured = true;
+    calibrationStep = IDLE;
+    Serial.print(F("UMED RAW = "));
+    Serial.println(calibration.wet);
+    if (!validCalibration()) {
+      dryCaptured = wetCaptured = false;
+      Serial.println(F("Calibrare esuata: valori la limita sau diferenta sub 50. Reincearca c."));
+      return;
+    }
+    calibration.magic = MAGIC;
+    EEPROM.put(0, calibration);
+    lastStopped = now;
+    automatic = !timeoutLocked;
+    if (timeoutLocked) {
+      Serial.println(F("Calibrare salvata, dar pompa e blocata. Verifica, apoi r si a."));
+    } else {
+      Serial.println(F("Calibrare salvata. Mod automat activ; asteapta 60 secunde."));
+    }
+  }
 }
 
 void handleCommand(char command) {
@@ -91,38 +131,13 @@ void handleCommand(char command) {
       setPump(false);
       dryCaptured = false;
       wetCaptured = false;
-      Serial.println(F("Calibrare noua. Pune senzorul in sol uscat, trimite u."));
-      break;
-    case 'u':
-    case 'w':
-      automatic = false;
-      setPump(false);
-      refreshSensor();
-      if (sensorFault) {
-        Serial.println(F("RAW la limita. Verifica firele; captura refuzata."));
-        break;
-      }
-      if (command == 'u') {
-        calibration.dry = rawValue;
-        dryCaptured = true;
-        Serial.print(F("USCAT = "));
-      } else {
-        calibration.wet = rawValue;
-        wetCaptured = true;
-        Serial.print(F("UMED = "));
-      }
-      Serial.println(rawValue);
-      break;
-    case 's':
-      if (validCalibration()) {
-        calibration.magic = MAGIC;
-        EEPROM.put(0, calibration);
-        Serial.println(F("Calibrare salvata. Trimite a pentru udare."));
-      } else Serial.println(F("Captureaza u si w; diferenta minima 50 RAW."));
+      calibrationStep = WAIT_DRY;
+      stepStarted = millis();
+      Serial.println(F("Calibrare: tine senzorul in sol USCAT 10 secunde."));
       break;
     case 'a':
       refreshSensor();
-      if (!validCalibration() || sensorFault || timeoutLocked) {
+      if (calibrationStep != IDLE || !validCalibration() || sensorFault || timeoutLocked) {
         Serial.println(F("Pornire refuzata: verifica calibrarea, senzorul sau blocarea."));
       } else {
         automatic = true;
@@ -132,6 +147,7 @@ void handleCommand(char command) {
     case 'o':
       automatic = false;
       setPump(false);
+      calibrationStep = IDLE;
       Serial.println(F("Mod automat oprit."));
       break;
     case 'r':
@@ -186,6 +202,7 @@ void loop() {
   }
   while (Serial.available() > 0) handleCommand(Serial.read());
   now = millis();
+  processCalibration(now);
   if (automatic && validCalibration() && !sensorFault && !timeoutLocked) {
     if (pumpRunning && moisture >= STOP_WATERING) {
       setPump(false);
@@ -205,10 +222,10 @@ void loop() {
     Serial.print(F("% | Pompa: "));
     Serial.print(pumpRunning ? F("PORNITA") : F("OPRITA"));
     Serial.print(F(" | Mod: "));
-    Serial.print(automatic ? F("AUTOMAT") : F("OPRIT/CALIBRARE"));
+    Serial.print(calibrationStep != IDLE ? F("CALIBRARE") :
+      (automatic ? F("AUTOMAT") : F("OPRIT")));
     if (timeoutLocked) Serial.print(F(" | BLOCAT 10s"));
     if (sensorFault) Serial.print(F(" | EROARE SENZOR"));
     Serial.println();
   }
 }
-
