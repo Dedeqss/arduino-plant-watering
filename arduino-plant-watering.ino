@@ -83,6 +83,8 @@ void printHelp() {
   Serial.println(F("Inainte de c: senzorul in sol uscat, pompa deconectata."));
   Serial.println(F("Dupa 10s: muta senzorul in sol foarte umed in 20s."));
   Serial.println(F("Programul salveaza si activeaza automat dupa calibrare."));
+  Serial.println(F("1 = porneste pompa ACUM manual (maxim 10 secunde)"));
+  Serial.println(F("0 = opreste pompa ACUM si opreste modul automat"));
   Serial.println(F("a = porneste modul automat cu calibrare valida"));
   Serial.println(F("o = opreste modul automat si pompa"));
   Serial.println(F("r = deblocheaza dupa limita de timp (pompa oprita)"));
@@ -126,6 +128,23 @@ void processCalibration(unsigned long now) {
 void handleCommand(char command) {
   switch (command) {
     case 'h': printHelp(); break;
+    case '1':
+      if (timeoutLocked) {
+        Serial.println(F("Pompa blocata dupa 10s. Verifica apa/furtunul, apoi r."));
+        break;
+      }
+      automatic = false;
+      calibrationStep = IDLE;
+      // Daca merge deja, nu reseta cronometrul limitei de 10 secunde.
+      if (!pumpRunning) setPump(true);
+      Serial.println(F("Pompa PORNITA manual, maxim 10 secunde. Trimite 0 pentru oprire."));
+      break;
+    case '0':
+      automatic = false;
+      calibrationStep = IDLE;
+      setPump(false);
+      Serial.println(F("Pompa OPRITA manual. Trimite a pentru mod automat."));
+      break;
     case 'c':
       automatic = false;
       setPump(false);
@@ -155,7 +174,7 @@ void handleCommand(char command) {
       automatic = false;
       timeoutLocked = false;
       lastStopped = millis();
-      Serial.println(F("Deblocat. Verifica apa si furtunul, apoi trimite a."));
+      Serial.println(F("Deblocat. Trimite a pentru automat sau 1 pentru test manual."));
       break;
     default: break; // ignora Enter, CR/LF si alte caractere
   }
@@ -190,12 +209,12 @@ void loop() {
     setPump(false);
     automatic = false;
     timeoutLocked = true;
-    Serial.println(F("LIMITA 10s: udare blocata. Verifica montajul; r apoi a."));
+    Serial.println(F("LIMITA 10s: pompa blocata. Verifica montajul; r apoi a sau 1."));
   }
   if (now - lastSample >= SAMPLE_MS) {
     lastSample = now;
     refreshSensor();
-    if (sensorFault) {
+    if (sensorFault && automatic) {
       setPump(false);
       automatic = false;
     }
