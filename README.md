@@ -64,35 +64,31 @@ Pentru o pompă DC cu motor cu perii, o diodă de protecție dimensionată pentr
 
 După Upload, programul rulează pe placă. Nu trebuie să păstrezi IDE-ul deschis pentru udare. Deschiderea Serial Monitor poate reseta UNO; programul reîncarcă valorile salvate și așteaptă 60 de secunde înainte de udare.
 
-## Calibrare în același fișier
+## Calibrare cu o singură comandă
 
-La prima pornire, fără calibrare salvată, pompa rămâne oprită.
+La prima pornire, fără calibrare salvată, pompa rămâne oprită. **Deconectează alimentarea pompei înainte de calibrare.** Ține electronica și conectorul senzorului departe de apă.
 
-**Deconectează alimentarea pompei înainte de calibrare.** Introdu doar partea sensibilă a senzorului în sol, păstrând electronica și conectorul uscate.
+1. Pune senzorul în pământ uscat. Deschide Serial Monitor la **9600 baud**, trimite doar litera **c** și apasă Enter.
+2. Lasă senzorul nemișcat **10 secunde**. Programul memorează singur valoarea pentru sol uscat.
+3. Când vezi mesajul „Acum muta senzorul in sol foarte umed”, mută senzorul în pământ foarte umed. Ai **20 de secunde** să îl muți și să îl lași să se stabilizeze.
+4. Programul citește valoarea umedă, verifică diferența dintre măsurători, salvează calibrarea în EEPROM și activează modul automat. Dacă verificarea eșuează, repetă de la pasul 1.
+5. Reconectează alimentarea pompei după ce verifici montajul. Udarea poate începe după **60 de secunde** de la salvare, dacă solul e sub pragul de pornire.
 
-1. Trimite **c** în Serial Monitor pentru o calibrare nouă.
-2. Pune senzorul în pământ uscat, așteaptă stabilizarea valorii RAW și trimite **u**.
-3. Pune senzorul în pământ foarte umed, așteaptă stabilizarea și trimite **w**.
-4. Trimite **s** pentru salvare. Programul refuză valori apropiate de limitele ADC sau o diferență mai mică de 50 între uscat și umed.
-5. Verifică legăturile releului cu pompa deconectată, apoi reconectează pompa.
-6. Trimite **a** pentru modul automat.
+**Nu trebuie să trimiți u, w, s sau a pentru calibrarea normală.** Folosești doar `c` și muți fizic senzorul între solul uscat și cel umed. Nu poate deduce ambele valori dintr-o singură probă de sol.
 
-Nu trebuie să modifici manual constantele de calibrare și să încarci din nou programul. Valorile se păstrează în EEPROM; după repornire, o calibrare validă activează automat udarea, cu o așteptare inițială de 60 de secunde.
+Valorile rămân salvate în EEPROM. La următoarea pornire, Arduino activează singur modul automat și așteaptă 60 de secunde înainte de prima udare.
 
 | Comandă | Acțiune |
 |---|---|
-| h | Afișează ajutorul |
-| c | Oprește udarea și începe o calibrare nouă |
-| u | Capturează valoarea pentru sol uscat |
-| w | Capturează valoarea pentru sol foarte umed |
-| s | Salvează calibrarea în EEPROM |
-| a | Activează udarea dacă senzorul și calibrarea sunt valide |
-| o | Oprește pompa și modul automat pentru sesiunea curentă |
-| r | Elimină blocarea de timp; rămâne oprit până trimiți a |
+| `c` | Pornește calibrarea ghidată și oprește pompa |
+| `h` | Afișează ajutorul |
+| `a` | Reactivează udarea după o oprire manuală sau după deblocare |
+| `o` | Oprește pompa și modul automat pentru sesiunea curentă; anulează calibrarea în curs |
+| `r` | Elimină blocarea după limita de 10 secunde; după verificarea montajului, trimite și `a` |
 
-Comenzile sunt litere mici. Enter și opțiunile de terminare a liniei sunt ignorate.
+Comenzile sunt litere mici. Enter și opțiunile de terminare a liniei sunt ignorate. Dacă limita de 10 secunde s-a activat înainte de recalibrare, ea rămâne blocată până verifici montajul și trimiți `r`, apoi `a`.
 
-**Procentul este o scară relativă între cele două valori calibrate**, nu o măsurare de laborator a cantității de apă din sol. Se adaptează la senzorul și solul folosite.
+**Procentul este o scară relativă între cele două valori calibrate**, nu o măsurare de laborator a cantității de apă din sol.
 
 ## Cum funcționează
 
