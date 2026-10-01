@@ -6,9 +6,9 @@ Calibrarea se face din Serial Monitor și se salvează în memoria EEPROM, astfe
 
 ## Schema montajului
 
-![Schema trimisă pentru udătorul automat](images/schema-udator-plante.png)
+![Schema trimisă pentru udătorul automat](images/schema-udator-plante.jpg)
 
-Imaginea este schema originală trimisă pentru proiect. **Pentru montaj, urmează etichetele pinilor și tabelul de mai jos**, nu poziția desenată a conectorilor. Firul VCC al releului trebuie legat explicit la 5V Arduino, chiar dacă traseul său nu este complet clar în imagine.
+Imaginea este schema trimisă pentru proiect, salvată în format JPG pentru a se încărca mai repede. **Pentru montaj, urmează etichetele pinilor și tabelul de mai jos**, nu poziția desenată a conectorilor. Firul VCC al releului trebuie legat explicit la 5V Arduino, chiar dacă traseul său nu este complet clar în imagine.
 
 ## Componente necesare
 
@@ -142,7 +142,7 @@ Vezi [prezentarea scurtă](docs/prezentare-scurta.md), cu rolul componentelor ș
 | arduino-plant-watering.ino | Singurul sketch: calibrare, EEPROM și udare |
 | README.md | Montaj, utilizare și depanare |
 | docs/prezentare-scurta.md | Text de prezentare |
-| images/schema-udator-plante.png | Imaginea originală a schemei |
+| images/schema-udator-plante.jpg | Imaginea originală a schemei |
 
 ## Referințe Arduino
 
