@@ -1,8 +1,8 @@
-# Udător automat pentru plante cu Arduino UNO
+# Udător automat pentru plante cu Arduino UNO — v2
 
 Un proiect pentru școală care citește umiditatea solului și comandă o pompă de apă printr-un releu. **Tot codul, inclusiv calibrarea, se află într-un singur fișier:** [arduino-plant-watering.ino](arduino-plant-watering.ino).
 
-Calibrarea se face din Serial Monitor și se salvează în memoria EEPROM, astfel încât valorile să rămână după oprirea alimentării. Nu trebuie să instalezi biblioteci suplimentare: EEPROM este inclusă în pachetul Arduino AVR.
+Versiunea v2 filtrează citirile senzorului și udă în pulsuri de 2 secunde. Calibrarea se salvează în EEPROM, dar după pornire sau reset pompa rămâne oprită până trimiți o comandă. Nu trebuie să instalezi biblioteci suplimentare: EEPROM este inclusă în pachetul Arduino AVR.
 
 ## Schema montajului
 
@@ -52,109 +52,120 @@ Contactele releului separă circuitul pompei de circuitul de comandă; pentru ac
 
 Pentru o pompă DC cu motor cu perii, o diodă de protecție dimensionată pentru motor se montează în paralel cu pompa, cu catodul (capătul cu bandă) la plus și anodul la minus. Dioda modulului de releu protejează bobina releului, nu motorul pompei.
 
-## Cum încarci codul în Arduino IDE
+## Cum încarci noua versiune
 
-1. Pe GitHub apasă **Code → Download ZIP** și dezarhivează proiectul.
-2. Folderul sketch-ului trebuie să se numească **arduino-plant-watering**, exact ca fișierul .ino. Dacă arhiva creează folderul arduino-plant-watering-main, redenumește-l.
-3. Deschide fișierul **arduino-plant-watering.ino** în Arduino IDE.
-4. Conectează Arduino prin USB.
-5. Selectează **Arduino Uno** și portul plăcii din meniul **Tools** sau selectorul de placă.
-6. Apasă **Verify**, apoi **Upload**.
-7. Deschide **Serial Monitor** la **9600 baud**.
+1. Descarcă proiectul cu **Code → Download ZIP**, dezarhivează-l și redenumește folderul sketch-ului în **arduino-plant-watering**, ca fișierul `.ino`.
+2. Deconectează alimentarea separată a pompei pentru încărcare și verificări.
+3. Deschide **arduino-plant-watering.ino**, alege **Arduino Uno** și portul corect, apoi **Verify → Upload**.
+4. Deschide **Serial Monitor la 9600 baud**.
+5. Trebuie să apară mesajul **BOOT v2 - pompa oprita**. Dacă apare alt mesaj vechi, noul program nu este încă pe placă.
 
-După Upload, programul rulează pe placă. Nu trebuie să păstrezi IDE-ul deschis pentru udare. Deschiderea Serial Monitor poate reseta UNO; programul reîncarcă valorile salvate și așteaptă 60 de secunde înainte de udare.
+**O actualizare în GitHub nu actualizează placa. Trebuie să faci Upload din nou.**
 
-## Cum funcționează, pas cu pas
+## Ce s-a schimbat și de ce
 
-**Prima dată — îl calibrezi o singură dată:**
+- La fiecare pornire/reset, pompa rămâne oprită, inclusiv când există calibrare salvată. Nu mai reia singură udarea după o resetare provocată de alimentare. Trimiți `a` când montajul este pregătit.
+- Modurile manual și automat sunt separate. Comanda `a` oprește un test manual înainte să activeze automatul și începe o nouă pauză.
+- Testul manual și fiecare udare automată durează **cel mult 2 secunde**. Sunt udări mai scurte; nu înseamnă că motorul merge mai încet.
+- În automat, se așteaptă **60 de secunde** între pulsuri pentru absorbția apei.
+- Citirile au filtru median și netezire; solul trebuie să rămână sub prag timp de **3 secunde** ca să pornească udarea.
+- Trei citiri consecutive aproape de limitele senzorului opresc automatul. O singură citire izolată nu mai schimbă imediat starea.
+- După 3 pulsuri, dacă solul este încă la 35% sau mai puțin după pauză, sistemul se blochează pentru verificare. Contorul se resetează când solul ajunge la 55%, sau când, după pauza de absorbție, este peste pragul de pornire.
+- Calibrarea folosește ultimele 8 citiri, aproximativ 2 secunde. Dacă acestea sunt instabile, o refuză. Calibrarea salvată anterior rămâne intactă dacă anulezi sau eșuează o recalibrare.
 
-1. Arduino rămâne alimentat prin USB, dar **deconectezi alimentarea separată a pompei** cât faci calibrarea.
-2. Pui partea sensibilă a senzorului în pământ uscat. Păstrezi electronica și conectorul uscate.
-3. În Serial Monitor la **9600 baud** scrii litera mică `c` și apeși Send/Enter. Nu mai trebuie alte comenzi pentru calibrare.
-4. La **10 secunde** după `c`, Arduino citește și reține singur valoarea pentru sol uscat. Îți afișează „Acum muta senzorul in sol foarte umed”.
-5. Muți senzorul în pământ foarte umed și îl lași să se stabilizeze. La **20 de secunde de la primul mesaj**, Arduino citește valoarea pentru sol umed. Dacă valorile sunt valide și diferă cu cel puțin 50 RAW, le **salvează singur în EEPROM** și activează udarea automată. Dacă apare „Calibrare esuata”, reiei de la pasul 2.
-6. Pui senzorul în ghiveciul pe care vrei să-l ude și reconectezi sursa separată a pompei după ce verifici firele. Prima udare poate începe la **60 de secunde după salvare**, numai dacă pământul este uscat.
+## Calibrarea: o singură comandă
 
-Arduino are nevoie de ambele probe, una uscată și una umedă. Nu poate afla pragurile corecte dintr-o singură citire. Nu trebuie să trimiți `u`, `w`, `s` sau `a` la calibrarea obișnuită; acele comenzi de calibrare din versiunea veche nu mai sunt folosite.
+Cu Arduino conectat și **alimentarea pompei deconectată**:
 
-**În fiecare zi — funcționează singur:**
+1. Pune partea sensibilă în pământ uscat. Scrie `c` și apasă Send/Enter.
+2. Ține senzorul nemișcat 10 secunde. Programul capturează singur valoarea uscată.
+3. La mesajul de mutare, pune senzorul în pământ foarte umed. Ai 20 de secunde; lasă-l stabil în ultimele secunde.
+4. Dacă diferența dintre uscat și umed este de minimum 50 RAW, iar ultimele citiri variază cu cel mult 30 RAW, programul salvează calibrarea în EEPROM.
+5. Pune senzorul în ghiveci, verifică apa, furtunul și firele, apoi reconectează sursa pompei.
+6. Trimite `a` pentru udarea automată.
 
-- Arduino citește senzorul aproximativ la fiecare 250 ms și afișează în Serial Monitor valoarea brută `RAW`, procentul relativ și starea pompei. Nu trebuie să ții calculatorul conectat ca să ude.
-- Dacă solul arată **35% sau mai puțin**, iar pauza s-a terminat, Arduino activează D7. Releul leagă sursa separată de 5V la pompă prin COM și NO; pompa udă planta.
-- Când senzorul arată **55% sau mai mult**, pompa se oprește. După oprire, Arduino așteaptă **60 de secunde** înainte să o poată porni din nou, ca apa să se răspândească prin pământ. Diferența dintre 35% și 55% previne pornirile repetate la oscilații mici.
-- Dacă pompa merge **10 secunde continuu** fără să ajungă la 55%, se oprește și **rămâne blocată**. Cele 10 secunde sunt o limită de protecție, iar pauza de 60 de secunde nu o deblochează. Verifici apa, furtunul și poziția senzorului, apoi trimiți `r` și după aceea `a` pentru automat sau `1` pentru un test manual.
-- Dacă citirea senzorului ajunge foarte aproape de 0 sau 1023, codul oprește udarea automată. După ce repari conexiunea și vezi o citire normală, trimiți `a`. Această verificare nu detectează toate defecțiunile; un senzor scos poate afișa și valori intermediare.
+**Nou în v2: calibrarea nu pornește singură pompa.** Ea salvează valorile, iar `a` activează udarea. Valorile rămân după întreruperea alimentării; la repornire trimiți din nou `a`, fără recalibrare. Dacă nu există calibrare validă, automatul refuză pornirea.
 
-**La următoarea alimentare:** Arduino recitește calibrarea salvată și activează singur modul automat. Așteaptă 60 de secunde înainte de prima udare. Poți să-l alimentezi cu un încărcător USB în locul calculatorului; pompa continuă să aibă sursa ei separată. Comanda `o` și blocarea de 10 secunde nu se salvează în EEPROM: după o repornire, dacă există calibrare validă, modul automat se reactivează. De aceea, dacă pompa a atins limita, verifică montajul înainte să o alimentezi din nou.
+Senzorul trebuie mutat fizic între cele două probe. Procentul afișat este o scară relativă între uscat și umed, nu o măsurare de laborator a cantității de apă.
 
-**Exemplu:** arată 30% → pompa pornește → apa ajunge la senzor și arată 55% → pompa se oprește → urmează pauza de 60 de secunde. Dacă nu ajunge la 55% în primele 10 secunde, se blochează și așteaptă verificarea ta.
+## Cum udă automat
 
-Procentul este **relativ la cele două probe de sol folosite la calibrare**; nu măsoară exact cantitatea de apă din pământ. Pragurile și timpii se pot ajusta în constantele de la începutul fișierului `.ino`, după teste supravegheate.
+După `a`, așteaptă cel puțin **60 de secunde**. La **35% sau mai puțin**, dacă valoarea rămâne sub prag 3 secunde, releul alimentează pompa **2 secunde**. Dacă senzorul ajunge la **55%**, pompa se poate opri mai devreme.
 
-## Control manual al pompei din Serial Monitor
+După oprire, așteaptă încă **60 de secunde**. Dacă solul este încă prea uscat, poate face un alt puls. Nu lasă pompa pornită continuu până când apa ajunge la senzor.
 
-Pentru un test, conectează Arduino la PC, deschide **Serial Monitor la 9600 baud** și scrie `1` în caseta de text, apoi apasă **Send/Enter**. Pompa pornește **imediat**, chiar dacă nu ai calibrat senzorul. Releul trebuie să fie legat corect, iar sursa separată de 5V a pompei trebuie conectată. Verifică înainte să existe apă și că pompa este folosită conform specificațiilor ei.
+Exemplu: 30% → udare 2 secunde → pauză 60 secunde → citește din nou. Dacă ajunge peste 35% după absorbție, nu mai pornește; dacă este încă la 30%, poate încerca din nou. Dacă rămâne prea uscat după 3 pulsuri, apare **BLOCAT** și cere verificarea apei/senzorului.
 
-Scrie `0` și apasă **Send/Enter** ca să oprești imediat pompa. `1` trece în modul manual și dezactivează udarea automată, iar `0` o lasă dezactivată. Pentru a reveni la udarea automată, trimite `a` după ce ai făcut o calibrare validă. **Nu apăsa doar săgețile sus/jos**: folosește caseta de trimitere a textului și cifrele `1` și `0`.
+Limita absolută de **10 secunde** rămâne ca protecție de rezervă. În funcționarea normală, pulsul de 2 secunde oprește pompa înainte de această limită.
 
-Chiar și în modul manual, după **10 secunde continue** pompa se oprește și se blochează. Trimiterea repetată a lui `1` nu resetează cronometrul. Dacă se blochează, verifică montajul, apoi trimite `r` pentru deblocare și `1` pentru alt test sau `a` pentru automat. `r` pornește o pauză de 60 de secunde pentru modul automat; `1` pornește direct pentru test. Comanda manuală funcționează și fără calibrare, dar trebuie să supraveghezi testul.
+## Toate comenzile
 
-## Toate comenzile din Serial Monitor
+În Serial Monitor la **9600 baud**, scrie câte un caracter și apasă **Send/Enter**. Literele mari și mici sunt acceptate; Enter/CR/LF sunt ignorate. Săgețile nu sunt comenzi pentru acest program.
 
-Setează Serial Monitor la **9600 baud**. Scrie **o singură literă mică** și apasă **Send/Enter**; programul ignoră caracterele de sfârșit de linie. Comenzile se folosesc la prima calibrare sau dacă intervii manual, nu la fiecare udare.
+| Comandă | Ce face exact |
+|---|---|
+| `1` | Pornește un test manual de **2 secunde**, fără calibrare și fără să depindă de umiditate. Dezactivează automatul. Dacă pompa merge deja, nu schimbă modul și nu prelungește timpul. Refuză testul în timpul calibrării, când există blocare sau în primele 0,5 s după o oprire. |
+| `0` | Oprește imediat pompa și automatul; anulează calibrarea în curs. Nu șterge calibrarea salvată și nu elimină o blocare. |
+| `a` | Oprește orice test manual, activează automatul și începe pauza de 60 s. Cere calibrare validă, cel puțin 3 citiri plauzibile și lipsa unei blocări. Nu pornește direct pompa. Dacă cerințele nu sunt îndeplinite, comanda este refuzată. |
+| `c` | Oprește pompa și începe calibrarea ghidată: uscat după 10 s, umed după încă 20 s. La final salvează valorile, dar rămâne oprit până la `a`. |
+| `o` | Oprește pompa și automatul, ca `0`; anulează calibrarea. |
+| `r` | Oprește tot și elimină blocarea/contorul de pulsuri. Nu pornește pompa. După verificare trimiți `a` pentru automat sau, după minimum 0,5 s, `1` pentru test. În timpul calibrării, întâi o anulezi cu `0`. |
+| `v` | Afișează imediat RAW, valoarea filtrată, umiditatea, starea pompei, modul, numărul de pulsuri și eventualele erori. |
+| `h` | Afișează ajutorul și comenzile. |
 
-| Comandă | Ce face exact | Când o folosești |
-|---|---|---|
-| `1` | Pornește imediat pompa în mod manual și oprește udarea automată. Nu necesită calibrare. Dacă pompa merge deja, nu prelungește limita de 10 s. Dacă este blocată, nu pornește. | Test rapid al releului și pompei, cu apă în pompă. |
-| `0` | Oprește imediat pompa, oprește modul automat și anulează o calibrare în curs. Nu șterge calibrarea salvată. | Când vrei să închei testul manual. |
-| `c` | Oprește pompa și modul automat, începe calibrarea de la zero. Citește uscat după 10 s, apoi umed după încă 20 s, verifică și salvează automat. Dacă o trimiți din nou, reia cronometrarea de la început. | Prima dată sau când schimbi senzorul/solul și vrei recalibrare. |
-| `h` | Afișează lista scurtă de instrucțiuni în Serial Monitor. Nu schimbă starea pompei. | Când vrei să revezi comenzile. |
-| `a` | Activează modul automat numai dacă există calibrare validă, citirea senzorului este plauzibilă și nu există blocare de 10 s. **Nu forțează pornirea imediată a pompei**: contează pragul de 35% și pauza. | După `o`, după repararea unei citiri greșite sau după `r`. Nu e necesară după o calibrare reușită. |
-| `o` | Oprește imediat pompa și modul automat; anulează și o calibrare aflată în curs. Calibrarea deja salvată în EEPROM rămâne salvată. | Când vrei să oprești temporar sistemul. |
-| `r` | Oprește pompa, dezactivează modul automat și șterge blocarea de 10 s; pornește o nouă pauză de 60 s. **Nu pornește singură pompa**; după verificare, trimiți `a` pentru automat sau `1` pentru test manual. | Numai după mesajul „LIMITA 10s”. |
+`u`, `w` și `s` din versiunile vechi sunt ignorate. Testarea manuală trebuie supravegheată, cu apă în pompă, conform instrucțiunilor acesteia. După un test, modul automat rămâne oprit până trimiți `a`.
 
-`u`, `w` și `s` din versiunea veche nu au nicio funcție în codul actual și sunt ignorate.
+## Pompa este prea puternică: ce poate face codul
+
+**Releul este un întrerupător: motorul primește tensiunea sursei sau este oprit.** Nu controla viteza cu PWM pe releu și nu îl comuta rapid pentru a reduce puterea.
+
+Această versiune reduce **durata și cantitatea de apă per udare**, nu viteza motorului. Constantele `WATER_PULSE_MS` și `MANUAL_PULSE_MS` sunt inițial 2000 ms. Ajustează-le după debitul măsurat al pompei; nu crește timpul peste limita absolută `MAX_PUMP_MS`.
+
+Dacă motorul merge prea tare, verifică întâi că sursa are tensiunea cerută de pompă: pentru pompa de 5V din proiect, sursa trebuie să fie **5V DC**. Nu folosi o sursă de 9V/12V. Curentul nominal mai mare al unei surse corecte de 5V nu forțează automat motorul să consume mai mult. Pentru controlul turației este necesar un circuit de comandă potrivit pompei, de exemplu un driver/MOSFET dimensionat și protecție pentru motor; schema cu releu nu oferă asta.
+
+## Arduino se deconectează din IDE
+
+O dispariție a portului USB poate avea cauze electrice, de cablu sau de port. Nu putem confirma cauza doar din cod. Interferențele unui motor și o sursă insuficientă pot provoca funcționare instabilă; codul nu poate repara sursa sau cablul.
+
+Testează în această ordine:
+
+1. **Deconectează doar alimentarea pompei**, păstrând Arduino prin USB. Trimite `1`, apoi `0` de câteva ori. Releul trebuie să comute, iar portul USB să rămână disponibil.
+2. Dacă se deconectează și fără pompă alimentată, verifică firele releului, scurtcircuitele, cablul USB de date și alt port USB direct al PC-ului.
+3. Dacă este stabil fără pompă și se deconectează numai când motorul este alimentat, verifică sursa separată, curentul de pornire al pompei și protecția la interferențe. Acest rezultat indică o problemă legată de circuitul motorului, fără să identifice singur piesa defectă.
+4. Pompa nu se alimentează din Arduino 5V. Pentru acest circuit cu contacte de releu, sursa pompei rămâne separată; nu uni plusurile surselor.
+5. Pentru un motor DC cu perii, verifică dioda de protecție în paralel cu pompa, dimensionată pentru motor: banda către plus, celălalt capăt către minus. Nu monta dioda invers. Dioda de pe modul protejează bobina releului, nu motorul.
+6. Dacă portul rămâne conectat, dar mesajul **BOOT v2** reapare fără să deschizi monitorul sau să faci Upload, Arduino s-a resetat. Deschiderea Serial Monitor poate provoca un reset normal pe UNO.
+
+Până rezolvi cauza deconectării, testează supravegheat. După orice reset, v2 rămâne oprit și nu reia singur udarea.
 
 ## Releu activ LOW sau HIGH
-
-Codul folosește inițial:
 
 ```cpp
 const bool RELAY_ACTIVE_LOW = true;
 ```
 
-Asta înseamnă LOW pentru activare și HIGH pentru oprire. Verifică specificațiile modulului tău. Dacă este activ HIGH, schimbă valoarea în **false** și reîncarcă programul. Testează cu alimentarea pompei deconectată.
+LOW activează și HIGH oprește un releu activ LOW. Dacă modulul tău este activ HIGH, schimbă în `false` și fă Upload. Verifică asta întâi cu pompa deconectată.
 
-Programul pregătește nivelul de oprire înainte de configurarea D7 ca ieșire. Comportamentul releului în timpul resetării, înainte să ruleze codul, depinde de modul și de circuitul de intrare al acestuia.
+Programul pregătește nivelul OFF înainte de configurarea D7 ca ieșire. În timpul resetării, înainte să ruleze programul, D7 nu este încă o ieșire comandată; comportamentul releului depinde de circuitul de intrare al modulului. Dacă acesta se activează la reset chiar și fără motor alimentat, circuitul de intrare trebuie verificat, nu doar codul.
 
-## Testare și probleme frecvente
+## Verificarea codului și limite
 
-| Situație | Ce verifici |
-|---|---|
-| RAW nu variază | AOUT la A0, VCC și GND, senzor introdus în sol |
-| Releul lucrează invers | Valoarea RELAY_ACTIVE_LOW |
-| Releul clicăie, pompa nu merge | COM și NO, sursa separată, polaritatea și necesarul pompei |
-| Pompa se blochează după 10 secunde | Rezervorul, furtunul, debitul și poziția senzorului; r apoi a după verificare |
-| Nu începe imediat udarea | Calibrarea, modul automat, pragul de 35% și pauza de 60 secunde |
-| Arduino se resetează când pornește pompa | Sursa pompei, firele, interferențele motorului și dioda de protecție |
+Au trecut teste pe calculator, cu senzorul, ceasul, releul și EEPROM simulate: pornire oprită cu calibrare salvată, test manual și oprire, comenzi repetate, trecere manual→automat, pulsuri de 2 s, pauze de 60 s, blocare după 3 pulsuri fără răspuns, filtrarea erorilor senzorului, calibrare, anulare și litere mari.
 
-Ține apa departe de Arduino, releu și conexiunile electrice. Folosește doar partea de joasă tensiune a unei surse gata construite; nu conecta tensiunea de la priză la montaj. Prima testare se face supravegheat. Fără senzor de nivel, programul nu poate detecta un rezervor gol.
-
-## Prezentare pentru școală
-
-Vezi [prezentarea scurtă](docs/prezentare-scurta.md), cu rolul componentelor și explicația funcționării.
+Aceasta nu este o compilare cu toolchain-ul AVR și nici o probă pe montajul fizic. **Verify/Upload în Arduino IDE și testarea sursei/pompei rămân necesare.** Filtrul nu detectează toate defectele: un senzor scos poate da și valori intermediare. Nu există senzor de nivel, deci programul nu știe dacă rezervorul este gol.
 
 ## Structura proiectului
 
 | Fișier | Conținut |
 |---|---|
-| arduino-plant-watering.ino | Singurul sketch: calibrare, EEPROM și udare |
-| README.md | Montaj, utilizare și depanare |
-| docs/prezentare-scurta.md | Text de prezentare |
+| arduino-plant-watering.ino | Singurul sketch: calibrare, filtrare, EEPROM și control |
+| README.md | Montaj, comenzi și depanare |
+| docs/prezentare-scurta.md | Explicația pentru școală |
 | images/schema-udator-plante.jpg | Schema trimisă, convertită în JPG |
 
-## Referințe Arduino
+## Referințe
 
-- [Încărcarea unui sketch](https://support.arduino.cc/hc/en-us/articles/4733418441116-Upload-a-sketch-in-Arduino-IDE)
-- [Memoria EEPROM](https://docs.arduino.cc/learn/built-in-libraries/eeprom/)
-- [analogRead](https://docs.arduino.cc/language-reference/en/functions/analog-io/analogRead/)
+- [Alimentarea separată a motoarelor și interferențele — Adafruit](https://learn.adafruit.com/adafruit-motor-shield-v2-for-arduino/powering-motors)
+- [Motor DC și diodă de protecție — Adafruit](https://learn.adafruit.com/adafruit-arduino-lesson-13-dc-motors/transistors)
+- [Placă nerecunoscută / cablu USB — Arduino](https://support.arduino.cc/hc/en-us/articles/4412955149586-If-your-board-is-not-detected-by-Arduino-IDE)
+- [Upload în Arduino IDE](https://support.arduino.cc/hc/en-us/articles/4733418441116-Upload-a-sketch-in-Arduino-IDE)
