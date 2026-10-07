@@ -1,9 +1,9 @@
-# Prezentare scurtă — Udător automat pentru plante
+# Prezentare scurtă — Udător automat pentru plante, v2
 
-Proiectul meu este un sistem automat de udare a plantelor cu Arduino UNO. Senzorul capacitiv de umiditate oferă o valoare analogică pe A0. După calibrarea în sol uscat și foarte umed, programul transformă citirea într-un procent relativ. Calibrarea se face din Serial Monitor, în același fișier cu programul, și se salvează în EEPROM.
+Proiectul folosește Arduino UNO pentru a citi un senzor capacitiv de umiditate pe A0. Citirile sunt filtrate pentru a reduce influența fluctuațiilor. Calibrarea se pornește cu o singură comandă și folosește probe de sol uscat și foarte umed. Valorile sunt salvate în EEPROM.
 
-Arduino comandă releul prin D7. Releul conectează sursa separată de 5V la pompă prin contactele COM și NO. Pompa nu este alimentată din Arduino.
+Arduino comandă un releu prin D7. Contactele COM și NO conectează sursa separată de 5V la pompă. Motorul nu se alimentează din Arduino. Releul poate porni și opri motorul, dar nu îi reglează viteza.
 
-Când umiditatea ajunge la 35% sau mai puțin, pompa poate porni. Se oprește la 55%. Diferența între praguri împiedică comutările repetate. După oprire urmează o pauză de 60 de secunde pentru distribuirea apei în sol. Dacă funcționează continuu 10 secunde, pompa se blochează până verific montajul și trimit comanda de deblocare.
+După pornire sau reset, pompa rămâne oprită. Comanda a activează udarea automată. Dacă solul este la 35% sau mai puțin și valoarea rămâne sub prag, programul udă cel mult 2 secunde, apoi așteaptă 60 de secunde pentru absorbția apei. La 55% poate opri pompa mai devreme. Dacă solul rămâne uscat după 3 pulsuri și pauzele dintre ele, sistemul se blochează pentru verificare.
 
-Astfel demonstrez citirea unui senzor analogic, comanda releului, calibrarea și salvarea datelor în memoria EEPROM. Rezervorul trebuie verificat separat, deoarece sistemul nu are senzor de nivel.
+Comanda 1 pornește un test manual de 2 secunde, iar 0 oprește pompa. Aceste teste nu necesită calibrare. Rezervorul trebuie verificat separat deoarece sistemul nu are senzor de nivel. Cablarea, sursa și protecția motorului sunt importante pentru a preveni interferențele și resetările.
