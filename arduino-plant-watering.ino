@@ -25,7 +25,12 @@ const unsigned long SAMPLE_MS = 250UL;
 const unsigned long LOG_MS = 1000UL;
 const unsigned long DRY_CAPTURE_MS = 10000UL;
 const unsigned long WET_CAPTURE_MS = 20000UL;
-const uint16_t MAGIC = 0x5732;
+const uint16_t LEGACY_MAGIC = 0x5732;
+const uint16_t MAGIC = 0xa641;
+static_assert(START_WATERING < STOP_WATERING && START_WATERING >= 0 && STOP_WATERING <= 100, "Praguri invalide");
+static_assert(WATER_PULSE_MS > 0 && WATER_PULSE_MS <= MAX_PUMP_MS, "Puls automat invalid");
+static_assert(MANUAL_PULSE_MS > 0 && MANUAL_PULSE_MS <= MAX_PUMP_MS, "Puls manual invalid");
+static_assert(SOAK_MS >= RELAY_REST_MS && MAX_AUTO_PULSES > 0, "Pauza/limita invalida");
 
 enum CalibrationStep { IDLE, WAIT_DRY, WAIT_WET };
 CalibrationStep calibrationStep = IDLE;
@@ -35,8 +40,9 @@ struct Calibration {
   uint16_t magic;
   int16_t dry;
   int16_t wet;
+  uint16_t checksum;
 };
-Calibration calibration = {0, 750, 350};
+Calibration calibration = {0, 750, 350, 0};
 bool dryCaptured = false;
 bool wetCaptured = false;
 bool automatic = false;
@@ -61,6 +67,8 @@ byte historyCount = 0;
 byte historyIndex = 0;
 int filteredRaw = 0;
 bool filterReady = false;
+bool helpPending = false;
+bool statusPending = false;
 
 void setPump(bool on) {
   digitalWrite(RELAY_PIN, on
@@ -88,9 +96,45 @@ bool readingsValid(int dry, int wet) {
     abs(dry - wet) >= 50;
 }
 
+uint16_t calibrationChecksum(const Calibration &value) {
+  const uint16_t words[3] = {MAGIC, (uint16_t)value.dry, (uint16_t)value.wet};
+  uint16_t crc = 0xffff;
+  for (byte i = 0; i < 3; i++) {
+    for (byte part = 0; part < 2; part++) {
+      crc ^= (words[i] >> (part * 8)) & 0xff;
+      for (byte bit = 0; bit < 8; bit++)
+        crc = (crc & 1) ? (crc >> 1) ^ 0xa001 : crc >> 1;
+    }
+  }
+  return crc;
+}
+
 bool validCalibration() {
-  return dryCaptured && wetCaptured &&
-    readingsValid(calibration.dry, calibration.wet);
+  return dryCaptured && wetCaptured && calibration.magic == MAGIC &&
+    readingsValid(calibration.dry, calibration.wet) &&
+    calibration.checksum == calibrationChecksum(calibration);
+}
+
+void saveCalibration() {
+  calibration.magic = MAGIC;
+  calibration.checksum = calibrationChecksum(calibration);
+  // Marcheaza invalid, scrie continutul, apoi publica antetul valid.
+  EEPROM.update(0, 0);
+  EEPROM.update(1, 0);
+  const byte *bytes = reinterpret_cast<const byte *>(&calibration);
+  for (byte i = 2; i < sizeof(Calibration); i++) EEPROM.update(i, bytes[i]);
+  EEPROM.update(0, bytes[0]);
+  EEPROM.update(1, bytes[1]);
+}
+
+bool loadCalibration() {
+  EEPROM.get(0, calibration);
+  if (calibration.magic == LEGACY_MAGIC &&
+      readingsValid(calibration.dry, calibration.wet)) {
+    saveCalibration(); // migreaza valorile vechi fara recalibrare
+  }
+  dryCaptured = wetCaptured = true;
+  return validCalibration();
 }
 
 void refreshSensor() {
@@ -101,7 +145,7 @@ void refreshSensor() {
   if (rawValue <= 5 || rawValue >= 1018) {
     goodSamples = 0;
     if (badSamples < 3) badSamples++;
-    if (badSamples >= 3) sensorFault = true;
+    if (badSamples >= 3) { sensorFault = true; filterReady = false; }
   } else {
     badSamples = 0;
     if (goodSamples < 3) goodSamples++;
@@ -139,7 +183,7 @@ void printHelp() {
   Serial.println(F("0 = opreste pompa ACUM si opreste modul automat"));
   Serial.println(F("a = porneste modul automat cu calibrare valida"));
   Serial.println(F("o = opreste modul automat si pompa; v = afiseaza starea"));
-  Serial.println(F("r = deblocheaza dupa limita de timp (pompa oprita)"));
+  Serial.println(F("r = elimina blocarea; pompa ramane oprita"));
   Serial.println(F("Calibreaza cu pompa deconectata; reconecteaza apoi."));
 }
 
@@ -167,7 +211,7 @@ void processCalibration(unsigned long now) {
     calibration.dry = pendingDry;
     calibration.wet = pendingWet;
     dryCaptured = wetCaptured = true;
-    EEPROM.put(0, calibration);
+    saveCalibration();
     filterReady = false;
     refreshSensor();
     Serial.print(F("UMED RAW = ")); Serial.println(pendingWet);
@@ -194,8 +238,8 @@ void printStatus() {
 
 void handleCommand(char command) {
   switch (command) {
-    case 'h': printHelp(); break;
-    case 'v': printStatus(); break;
+    case 'h': helpPending = true; break;
+    case 'v': statusPending = true; break;
     case '1':
       if (calibrationStep != IDLE) {
         Serial.println(F("Test refuzat in calibrare. Trimite 0 pentru anulare."));
@@ -213,9 +257,8 @@ void handleCommand(char command) {
       automatic = false;
       manualMode = true;
       calibrationStep = IDLE;
-      // Daca merge deja, nu reseta cronometrul limitei de 10 secunde.
-      if (!pumpRunning) setPump(true);
       Serial.println(F("Test manual PORNIT 2 secunde. 0 opreste imediat."));
+      setPump(true); // afisarea se termina INAINTE sa porneasca motorul
       break;
     case '0':
       automatic = false;
@@ -235,6 +278,9 @@ void handleCommand(char command) {
       Serial.println(F("Calibrare: tine senzorul in sol USCAT 10 secunde."));
       break;
     case 'a':
+      setPump(false);
+      automatic = manualMode = false;
+      dryTiming = false;
       refreshSensor();
       if (calibrationStep != IDLE || !validCalibration() || sensorFault || goodSamples < 3 || timeoutLocked) {
         Serial.println(F("Pornire refuzata: verifica calibrarea, senzorul sau blocarea."));
@@ -276,10 +322,8 @@ void setup() {
   digitalWrite(RELAY_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
   pinMode(RELAY_PIN, OUTPUT);
   Serial.begin(9600);
-  Serial.println(F("BOOT v2 - pompa oprita. Daca mesajul reapare singur: verifica alimentarea."));
-  EEPROM.get(0, calibration);
-  dryCaptured = wetCaptured = true;
-  if (calibration.magic != MAGIC || !validCalibration()) {
+  Serial.println(F("BOOT v2.1 - pompa oprita. Daca mesajul reapare singur: verifica alimentarea."));
+  if (!loadCalibration()) {
     calibration.magic = 0;
     calibration.dry = 750;
     calibration.wet = 350;
@@ -327,6 +371,8 @@ void loop() {
     }
   }
   processCalibration(now);
+  // setPump(false) poate avansa millis; nu scade lastStopped dintr-un timp vechi.
+  now = millis();
   if (automatic && validCalibration() && !sensorFault && !timeoutLocked) {
     if (moisture >= STOP_WATERING) {
       if (pumpRunning) setPump(false);
@@ -342,8 +388,8 @@ void loop() {
           Serial.println(F("BLOCAT: sol inca uscat dupa 3 pulsuri. Verifica apa/senzorul; r."));
         } else {
           autoPulses++;
-          setPump(true);
           Serial.println(F("Sol uscat stabil: puls udare 2s."));
+          setPump(true);
         }
       }
     } else {
@@ -351,8 +397,13 @@ void loop() {
       if (!pumpRunning && now - lastStopped >= SOAK_MS) autoPulses = 0;
     }
   }
-  if (now - lastLog >= LOG_MS) {
-    lastLog = now;
-    printStatus();
+  // Print la 9600 baud poate bloca. Mesajele lungi se emit doar cu motorul OFF.
+  if (!pumpRunning) {
+    if (helpPending) { helpPending = false; printHelp(); }
+    if (statusPending || millis() - lastLog >= LOG_MS) {
+      statusPending = false;
+      lastLog = millis();
+      printStatus();
+    }
   }
 }
