@@ -1,8 +1,8 @@
-# Udător automat pentru plante cu Arduino UNO — v2
+# Udător automat pentru plante cu Arduino UNO — v2.1
 
 Un proiect pentru școală care citește umiditatea solului și comandă o pompă de apă printr-un releu. **Tot codul, inclusiv calibrarea, se află într-un singur fișier:** [arduino-plant-watering.ino](arduino-plant-watering.ino).
 
-Versiunea v2 filtrează citirile senzorului și udă în pulsuri de 2 secunde. Calibrarea se salvează în EEPROM, dar după pornire sau reset pompa rămâne oprită până trimiți o comandă. Nu trebuie să instalezi biblioteci suplimentare: EEPROM este inclusă în pachetul Arduino AVR.
+Versiunea v2.1 filtrează citirile senzorului și udă în pulsuri de 2 secunde. Calibrarea se salvează în EEPROM, dar după pornire sau reset pompa rămâne oprită până trimiți o comandă. Nu trebuie să instalezi biblioteci suplimentare: EEPROM este inclusă în pachetul Arduino AVR.
 
 ## Schema montajului
 
@@ -58,7 +58,7 @@ Pentru o pompă DC cu motor cu perii, o diodă de protecție dimensionată pentr
 2. Deconectează alimentarea separată a pompei pentru încărcare și verificări.
 3. Deschide **arduino-plant-watering.ino**, alege **Arduino Uno** și portul corect, apoi **Verify → Upload**.
 4. Deschide **Serial Monitor la 9600 baud**.
-5. Trebuie să apară mesajul **BOOT v2 - pompa oprita**. Dacă apare alt mesaj vechi, noul program nu este încă pe placă.
+5. Trebuie să apară mesajul **BOOT v2.1 - pompa oprita**. Dacă apare alt mesaj vechi, noul program nu este încă pe placă.
 
 **O actualizare în GitHub nu actualizează placa. Trebuie să faci Upload din nou.**
 
@@ -66,11 +66,15 @@ Pentru o pompă DC cu motor cu perii, o diodă de protecție dimensionată pentr
 
 - La fiecare pornire/reset, pompa rămâne oprită, inclusiv când există calibrare salvată. Nu mai reia singură udarea după o resetare provocată de alimentare. Trimiți `a` când montajul este pregătit.
 - Modurile manual și automat sunt separate. Comanda `a` oprește un test manual înainte să activeze automatul și începe o nouă pauză.
-- Testul manual și fiecare udare automată durează **cel mult 2 secunde**. Sunt udări mai scurte; nu înseamnă că motorul merge mai încet.
+- Testul manual și fiecare udare automată durează **aproximativ 2 secunde**; oprirea se verifică în bucla programului. Sunt udări mai scurte; nu înseamnă că motorul merge mai încet.
 - În automat, se așteaptă **60 de secunde** între pulsuri pentru absorbția apei.
 - Citirile au filtru median și netezire; solul trebuie să rămână sub prag timp de **3 secunde** ca să pornească udarea.
 - Trei citiri consecutive aproape de limitele senzorului opresc automatul. O singură citire izolată nu mai schimbă imediat starea.
 - După 3 pulsuri, dacă solul este încă la 35% sau mai puțin după pauză, sistemul se blochează pentru verificare. Contorul se resetează când solul ajunge la 55%, sau când, după pauza de absorbție, este peste pragul de pornire.
+- Timpii sunt recalculați după oprirea releului, pentru a evita o repornire imediată provocată de scăderea unui timp mai nou dintr-un timp memorat mai vechi.
+- Afișarea ajutorului/stării este amânată când motorul merge. Astfel, un șir de comenzi de afișare nu prelungește udarea prin blocarea comunicației seriale.
+- Calibrarea nouă are CRC16 și este publicată în EEPROM numai după scrierea datelor. O înregistrare nouă invalidă este refuzată. Valorile valide din versiunea veche sunt migrate automat; o întrerupere în timpul salvării poate cere recalibrare.
+- Constantele pragurilor și duratelor sunt verificate la compilare, astfel încât combinațiile invalide să nu fie încărcate.
 - Calibrarea folosește ultimele 8 citiri, aproximativ 2 secunde. Dacă acestea sunt instabile, o refuză. Calibrarea salvată anterior rămâne intactă dacă anulezi sau eșuează o recalibrare.
 
 ## Calibrarea: o singură comandă
@@ -84,7 +88,7 @@ Cu Arduino conectat și **alimentarea pompei deconectată**:
 5. Pune senzorul în ghiveci, verifică apa, furtunul și firele, apoi reconectează sursa pompei.
 6. Trimite `a` pentru udarea automată.
 
-**Nou în v2: calibrarea nu pornește singură pompa.** Ea salvează valorile, iar `a` activează udarea. Valorile rămân după întreruperea alimentării; la repornire trimiți din nou `a`, fără recalibrare. Dacă nu există calibrare validă, automatul refuză pornirea.
+**Nou în v2.1: calibrarea nu pornește singură pompa.** Ea salvează valorile, iar `a` activează udarea. Valorile rămân după întreruperea alimentării; la repornire trimiți din nou `a`, fără recalibrare. Dacă nu există calibrare validă, automatul refuză pornirea.
 
 Senzorul trebuie mutat fizic între cele două probe. Procentul afișat este o scară relativă între uscat și umed, nu o măsurare de laborator a cantității de apă.
 
@@ -106,12 +110,12 @@ Limita absolută de **10 secunde** rămâne ca protecție de rezervă. În func�
 |---|---|
 | `1` | Pornește un test manual de **2 secunde**, fără calibrare și fără să depindă de umiditate. Dezactivează automatul. Dacă pompa merge deja, nu schimbă modul și nu prelungește timpul. Refuză testul în timpul calibrării, când există blocare sau în primele 0,5 s după o oprire. |
 | `0` | Oprește imediat pompa și automatul; anulează calibrarea în curs. Nu șterge calibrarea salvată și nu elimină o blocare. |
-| `a` | Oprește orice test manual, activează automatul și începe pauza de 60 s. Cere calibrare validă, cel puțin 3 citiri plauzibile și lipsa unei blocări. Nu pornește direct pompa. Dacă cerințele nu sunt îndeplinite, comanda este refuzată. |
+| `a` | Oprește mai întâi pompa și testul manual. Dacă există calibrare validă, cel puțin 3 citiri plauzibile și nu există blocare, activează automatul și începe pauza de 60 s. Nu pornește direct pompa. Dacă cerințele nu sunt îndeplinite, rămâne oprit. |
 | `c` | Oprește pompa și începe calibrarea ghidată: uscat după 10 s, umed după încă 20 s. La final salvează valorile, dar rămâne oprit până la `a`. |
 | `o` | Oprește pompa și automatul, ca `0`; anulează calibrarea. |
 | `r` | Oprește tot și elimină blocarea/contorul de pulsuri. Nu pornește pompa. După verificare trimiți `a` pentru automat sau, după minimum 0,5 s, `1` pentru test. În timpul calibrării, întâi o anulezi cu `0`. |
-| `v` | Afișează imediat RAW, valoarea filtrată, umiditatea, starea pompei, modul, numărul de pulsuri și eventualele erori. |
-| `h` | Afișează ajutorul și comenzile. |
+| `v` | Cere afișarea RAW, valorii filtrate, umidității, stării pompei, modului, numărului de pulsuri și erorilor. Dacă pompa merge, afișarea este amânată până se oprește. |
+| `h` | Cere afișarea ajutorului și comenzilor. Dacă pompa merge, afișarea este amânată până se oprește. |
 
 `u`, `w` și `s` din versiunile vechi sunt ignorate. Testarea manuală trebuie supravegheată, cu apă în pompă, conform instrucțiunilor acesteia. După un test, modul automat rămâne oprit până trimiți `a`.
 
@@ -134,9 +138,9 @@ Testează în această ordine:
 3. Dacă este stabil fără pompă și se deconectează numai când motorul este alimentat, verifică sursa separată, curentul de pornire al pompei și protecția la interferențe. Acest rezultat indică o problemă legată de circuitul motorului, fără să identifice singur piesa defectă.
 4. Pompa nu se alimentează din Arduino 5V. Pentru acest circuit cu contacte de releu, sursa pompei rămâne separată; nu uni plusurile surselor.
 5. Pentru un motor DC cu perii, verifică dioda de protecție în paralel cu pompa, dimensionată pentru motor: banda către plus, celălalt capăt către minus. Nu monta dioda invers. Dioda de pe modul protejează bobina releului, nu motorul.
-6. Dacă portul rămâne conectat, dar mesajul **BOOT v2** reapare fără să deschizi monitorul sau să faci Upload, Arduino s-a resetat. Deschiderea Serial Monitor poate provoca un reset normal pe UNO.
+6. Dacă portul rămâne conectat, dar mesajul **BOOT v2.1** reapare fără să deschizi monitorul sau să faci Upload, Arduino s-a resetat. Deschiderea Serial Monitor poate provoca un reset normal pe UNO.
 
-Până rezolvi cauza deconectării, testează supravegheat. După orice reset, v2 rămâne oprit și nu reia singur udarea.
+Până rezolvi cauza deconectării, testează supravegheat. După orice reset, v2.1 rămâne oprit și nu reia singur udarea.
 
 ## Releu activ LOW sau HIGH
 
@@ -150,9 +154,19 @@ Programul pregătește nivelul OFF înainte de configurarea D7 ca ieșire. În t
 
 ## Verificarea codului și limite
 
-Au trecut teste pe calculator, cu senzorul, ceasul, releul și EEPROM simulate: pornire oprită cu calibrare salvată, test manual și oprire, comenzi repetate, trecere manual→automat, pulsuri de 2 s, pauze de 60 s, blocare după 3 pulsuri fără răspuns, filtrarea erorilor senzorului, calibrare, anulare și litere mari.
+Versiunea v2.1 a fost compilată pentru **Arduino UNO / ATmega328P**, cu **Arduino CLI 1.3.1**, pachetul **Arduino AVR Boards 1.8.6** și compilatorul **avr-gcc 7.3.0**.
 
-Aceasta nu este o compilare cu toolchain-ul AVR și nici o probă pe montajul fizic. **Verify/Upload în Arduino IDE și testarea sursei/pompei rămân necesare.** Filtrul nu detectează toate defectele: un senzor scos poate da și valori intermediare. Nu există senzor de nivel, deci programul nu știe dacă rezervorul este gol.
+- Flash: **7578 / 32256 bytes (23%)**.
+- Variabile globale în RAM: **262 / 2048 bytes (12%)**; rămân 1786 bytes pentru stivă și variabile locale.
+- Compilarea sketch-ului a reușit. Prima compilare a afișat avertismente de parametri nefolosiți din biblioteca de bază Arduino, nu din sketch.
+- **114 verificări simulate au trecut**, cu întârzieri pentru releu și UART, timp de 32 de biți, comenzi repetate, schimbarea modului, pauze/pulsuri/blocare, senzor defect, filtrare, calibrare și anulare.
+- Au fost testate modificările individuale ale fiecăruia dintre cei 64 de biți ai înregistrării EEPROM, întreruperea salvării în diferite puncte, migrarea calibrării vechi și senzori cu sens invers al valorilor.
+- Testele pe calculator au folosit verificarea accesului la memorie și a comportamentelor nedefinite. Acestea nu simulează curentul motorului, contactele fizice sau comportamentul portului USB.
+- În codul vechi a fost reprodusă o repornire fără pauza de 60 s când ceasul avansa în timpul opririi releului. Același scenariu trece cu v2.1.
+
+**Compilarea și testele nu confirmă că montajul tău fizic este în regulă.** Nu avem măsurători ale sursei, curentului motorului sau zgomotului electric. Dacă USB se deconectează, urmează testele de izolare de mai sus. Protecția de timp depinde de executarea programului: dacă microcontrolerul se blochează sau contactele releului se lipesc, codul nu garantează oprirea motorului.
+
+Filtrul nu detectează toate defectele: un senzor scos poate da și valori intermediare. Nu există senzor de nivel, deci programul nu știe dacă rezervorul este gol. Verifică alimentarea și releul cu motorul deconectat înainte de proba cu apă.
 
 ## Structura proiectului
 
@@ -165,7 +179,7 @@ Aceasta nu este o compilare cu toolchain-ul AVR și nici o probă pe montajul fi
 
 ## Referințe
 
-- [Alimentarea separată a motoarelor și interferențele — Adafruit](https://learn.adafruit.com/adafruit-motor-shield-v2-for-arduino/powering-motors)
+- [Alimentarea separată a motoarelor și interferențele — Adafruit](https://learn.adafruit.com/adafruit-motor-shield-v2.1-for-arduino/powering-motors)
 - [Motor DC și diodă de protecție — Adafruit](https://learn.adafruit.com/adafruit-arduino-lesson-13-dc-motors/transistors)
 - [Placă nerecunoscută / cablu USB — Arduino](https://support.arduino.cc/hc/en-us/articles/4412955149586-If-your-board-is-not-detected-by-Arduino-IDE)
 - [Upload în Arduino IDE](https://support.arduino.cc/hc/en-us/articles/4733418441116-Upload-a-sketch-in-Arduino-IDE)
