@@ -1,14 +1,20 @@
+// Configureaza direct aici conexiunea la hotspot si Blynk.
+// NU publica parola sau tokenul real intr-un repository public.
+#define BLYNK_TEMPLATE_ID "TMPL47bG6YtpW"
+#define BLYNK_TEMPLATE_NAME "led si releu"
+#define BLYNK_AUTH_TOKEN "INLOCUIESTE_CU_TOKENUL_BLYNK"
+
 #include <Arduino.h>
 #include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
 #include <stdio.h>
 #include <string.h>
 
-// Copiaza secrets.example.h in secrets.h in acelasi folder.
-// COMPLETEAZA valorile doar local; secrets.h este ignorat de Git.
+char ssid[] = "Samsung S25";
+char pass[] = "INLOCUIESTE_CU_PAROLA_WIFI";
+
 // ESP32 UART2: TX2(GPIO17) -> UNO D10 direct
 // ESP32 RX2(GPIO16) <- UNO D11 PRIN divizor rezistiv 5V->3.3V
-#include "secrets.h"
-#include <BlynkSimpleEsp32.h>
 
 #define ESP_RX 16
 #define ESP_TX 17
@@ -143,7 +149,7 @@ void setup() {
   timer.setInterval(5000L, publishBlynk);
 
   Serial.println("ESP32: conexiune Wi-Fi / Blynk");
-  Blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
   sendConfig();
 }
