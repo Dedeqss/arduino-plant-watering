@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <BlynkSimpleEsp32.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -9,6 +8,7 @@
 // ESP32 UART2: TX2(GPIO17) -> UNO D10 direct
 // ESP32 RX2(GPIO16) <- UNO D11 PRIN divizor rezistiv 5V->3.3V
 #include "secrets.h"
+#include <BlynkSimpleEsp32.h>
 
 #define ESP_RX 16
 #define ESP_TX 17
