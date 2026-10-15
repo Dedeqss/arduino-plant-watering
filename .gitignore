@@ -1,0 +1,9 @@
+# Date private pentru ESP32
+ESP32/secrets.h
+
+# Fisiere generate de Arduino IDE
+*.bin
+*.elf
+*.hex
+*.map
+.DS_Store
