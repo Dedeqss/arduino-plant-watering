@@ -94,6 +94,19 @@ Configurează datastream-urile în **Developer Zone → My Templates → Datastr
 
 Exemplul 850/350 din cod **nu este calibrare efectuată**. Dacă sonda ta produce valori în sens invers, calibrarea cu punctele reale rezolvă problema. Senzorul rezistiv poate coroda dacă este menținut alimentat și în sol umed timp îndelungat.
 
+## Test de conectare ESP32 (Serial Monitor 115200)
+
+Versiunea actuală a sketch-ului ESP32 încearcă Wi-Fi și Blynk **separat**, fără să rămână blocată la pornire. Înainte de Upload înlocuiește **în ESP32.ino** valorile `INLOCUIESTE_CU_PAROLA_WIFI` și `INLOCUIESTE_CU_TOKENUL_BLYNK` cu datele tale reale, **doar pe calculator**.
+
+- `ESP32: conectare hotspot Samsung S25` – începe conectarea la hotspot.
+- `Astept Wi-Fi ... status=...` – nu a obținut conexiunea Wi-Fi. Verifică hotspot pornit, 2.4 GHz, WPA2 și parola exactă.
+- `Wi-Fi conectat! IP: ...` – ESP32 s-a conectat la hotspot. Verifică apoi Blynk.
+- `Wi-Fi OK. Incerc conectarea la Blynk...` – conexiunea la serverul Blynk este în curs.
+- `Blynk nu se conecteaza...` – Wi-Fi este conectat, însă Blynk nu a reușit conectarea. Verifică internetul mobil și tokenul dispozitivului.
+- `Blynk conectat` – autentificarea la Blynk a reușit.
+
+Dacă există încă probleme, trimite textul complet din Serial Monitor **fără parole sau token**. Sketch-ul încearcă automat din nou conexiunea.
+
 ## Depanare
 
 - **Blynk Offline:** verifică Wi-Fi-ul de 2.4 GHz, tokenul Blynk și alimentarea ESP32.
