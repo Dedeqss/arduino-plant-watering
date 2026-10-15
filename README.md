@@ -6,7 +6,6 @@ Proiect școlar: Arduino UNO citește **DHT11** (temperatură și umiditate aer)
 
 - [Arduino UNO – Arduino_UNO.ino](Arduino_UNO/Arduino_UNO.ino)
 - [ESP32 – ESP32.ino](ESP32/ESP32.ino)
-- [Exemplu configurație ESP32](ESP32/secrets.example.h)
 
 **IMPORTANT:** Nu pune cele două fișiere `.ino` în același sketch Arduino IDE. Fiecare placă are propriul program, încărcat prin USB.
 
@@ -57,11 +56,11 @@ Arduino D11 (5V TX)
 
 1. Instalează pachetul de plăci **esp32** (Espressif Systems) și biblioteca **Blynk**.
 2. Deschide `ESP32/ESP32.ino`; selectează **ESP32 Dev Module**.
-3. În același folder, **copiază** `secrets.example.h` ca `secrets.h` și completează local `BLYNK_AUTH_TOKEN`, `WIFI_SSID`, `WIFI_PASS`. Nu modifica numele `BLYNK_TEMPLATE_ID` decât dacă ai creat alt template.
+3. La începutul fișierului **`ESP32/ESP32.ino`**, modifică direct `BLYNK_AUTH_TOKEN`, `ssid` și `pass` cu datele tale. Numele hotspot-ului este deja `Samsung S25`. Nu modifica `BLYNK_TEMPLATE_ID` decât dacă ai creat alt template.
 4. Încarcă folosind Upload și deschide Serial Monitor la **115200 baud**.
 5. Hotspot-ul Samsung trebuie să funcționeze pe banda **2.4 GHz** și să ofere internet.
 
-Fișierul `ESP32/secrets.h` este ignorat de Git (`.gitignore`) și nu trebuie publicat. Dacă tokenul sau parola au fost expuse anterior, regenerează tokenul Blynk și schimbă parola.
+**Repository-ul este public.** Pentru a nu expune parolele, codul de pe GitHub conține valori de înlocuit. După ce descarci fișierul, completează parola hotspot-ului și tokenul Blynk în Arduino IDE, apoi încarcă pe placă. Evită să urci din nou pe GitHub fișierul cu credențialele reale. Dacă tokenul a fost expus anterior, regenerează-l în Blynk.
 
 ## Setările Blynk IoT
 
