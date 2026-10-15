@@ -35,6 +35,12 @@ char rxBuffer[80];
 size_t rxLength = 0;
 BlynkTimer timer;
 
+// Diagnostice + reconectare fara blocare permanenta in Blynk.begin().
+unsigned long lastWifiStatus = 0;
+unsigned long lastWifiRetry = 0;
+unsigned long lastBlynkRetry = 0;
+bool wifiWasConnected = false;
+
 void sendConfig() {
   Serial2.print("CFG,");
   Serial2.print(automaticMode ? 1 : 0);
@@ -140,22 +146,76 @@ void publishBlynk() {
   Blynk.virtualWrite(V2, ledState ? 1 : 0);
 }
 
+void maintainConnection() {
+  unsigned long now = millis();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    if (wifiWasConnected) {
+      Serial.println("Wi-Fi deconectat!");
+      wifiWasConnected = false;
+    }
+
+    if (now - lastWifiStatus >= 5000UL) {
+      lastWifiStatus = now;
+      Serial.print("Astept Wi-Fi ... status=");
+      Serial.println((int)WiFi.status());
+      Serial.println("Verifica parola, hotspot pornit, banda 2.4 GHz, WPA2.");
+    }
+
+    // Reincearca daca hotspot-ul nu este disponibil la pornire.
+    if (now - lastWifiRetry >= 15000UL) {
+      lastWifiRetry = now;
+      Serial.println("Reincerc conectarea la hotspot...");
+      WiFi.reconnect();
+    }
+
+    return;
+  }
+
+  if (!wifiWasConnected) {
+    wifiWasConnected = true;
+    Serial.print("Wi-Fi conectat! IP: ");
+    Serial.println(WiFi.localIP());
+    lastBlynkRetry = 0; // Incercam Blynk imediat.
+  }
+
+  if (!Blynk.connected() &&
+      (lastBlynkRetry == 0 || now - lastBlynkRetry >= 7000UL)) {
+    lastBlynkRetry = now;
+    Serial.println("Wi-Fi OK. Incerc conectarea la Blynk...");
+
+    // 2 secunde maxim per incercare, nu blocheaza restul programului.
+    if (!Blynk.connect(2000)) {
+      Serial.println("Blynk nu se conecteaza: verifica tokenul si internetul.");
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, ESP_RX, ESP_TX);
 
+  // Configuram Blynk fara sa blocam pornirea cand Wi-Fi nu merge.
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  Blynk.config(BLYNK_AUTH_TOKEN);
+
   timer.setInterval(4000L, sendConfig);
   timer.setInterval(5000L, publishBlynk);
 
-  Serial.println("ESP32: conexiune Wi-Fi / Blynk");
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-
+  Serial.print("ESP32: conectare hotspot ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, pass);
   sendConfig();
 }
 
 void loop() {
-  Blynk.run();
+  maintainConnection();
+
+  if (Blynk.connected()) {
+    Blynk.run();
+  }
+
   timer.run();
   readArduino();
 }
